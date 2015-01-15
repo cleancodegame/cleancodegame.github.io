@@ -318,7 +318,8 @@ var GameView = React.createClass({displayName: "GameView",
 		return {
 			levelIndex: levelIndex,
 			maxScore: 0,
-			score: 0
+			score: 0,
+			time: new Date().getTime()
 		};
 	},
 
@@ -351,11 +352,15 @@ var GameView = React.createClass({displayName: "GameView",
 	},
 
 	handleNext: function(score){
-		_gaq.push(['_trackEvent', 'level-solved', 'level-solved.' + this.state.levelIndex, '']);
+		var elapsed = new Date().getTime() - this.state.time;
+		var category = 'level-solved';
+		var event = category + '.' + this.state.levelIndex;
+		_gaq.push(['_trackEvent', category, event, event + '.' + elapsed]);
 		this.setState({
 			score: score,
 			maxScore: this.state.maxScore + this.level().bugsCount,
 			levelIndex: this.state.levelIndex+1,
+			time: new Date().getTime()
 		});
 	},
 
@@ -488,6 +493,9 @@ var LevelView = React.createClass({displayName: "LevelView",
 	},
 
 	handleUseHint: function(){
+		var category = "hint."+this.props.codeSample.name;
+		var hint = this.state.availableHints[0].description.substring(0, 20);
+		_gaq.push(['_trackEvent', category, category + "." + hint, category + "." + hint]);
 		this.setState({
 			availableHints: this.state.availableHints.slice(1),
 			score: Math.max(this.state.score - 1, 0),
