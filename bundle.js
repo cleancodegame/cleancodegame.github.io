@@ -614,7 +614,7 @@ var ResultsView = React.createClass({displayName: "ResultsView",
 	},
 
 	getScorePercentage: function(){
-		if (this.props.maxScore >= 0) return 0;
+		if (this.props.maxScore <= 0) return 0;
 		return Math.round(100 * this.props.score / this.props.maxScore);
 	},
 
