@@ -1,17 +1,29 @@
 (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
+var GameModel = require("./GameModel");
 var GameView = require("./GameView");
 
-function renderGame(component){
-	React.render(component, document.getElementById("gameContainer"));
-};
+var ProgressBar = React.createClass({displayName: "ProgressBar",
+	mixins: [Backbone.React.Component.mixin],
+
+	render: function() {
+		return React.createElement("table", {className: "header-progress"}, 
+					React.createElement("tr", null, 
+						
+							_.map(_.keys(this.props.levels), function(level, i){
+								var classes = "progress-tile" + ((i < this.props.levelIndex) ? " solved" : "");
+								return React.createElement("td", {key: level.name, className: classes})
+							}.bind(this))
+						
+					)
+				)
+	},
+});
 
 var AppView = React.createClass({displayName: "AppView",
-	propTypes: {
-		levelsHolder: React.PropTypes.object.isRequired
-	},
+	mixins: [Backbone.React.Component.mixin],
 	getInitialState: function() {
 		return {
-			started: false
+			started: false,
 		};
 	},
 	render: function() {
@@ -24,15 +36,17 @@ var AppView = React.createClass({displayName: "AppView",
 			  );
 	},
 
+
 	renderHeader: function(){
 		var classes = "header-text" + (this.state.started ? '' : ' tall');
 		return React.createElement("div", {className: "header"}, 
 		    React.createElement("div", {className: "container header"}, 
 		      React.createElement("div", {className: classes}, 
-		      React.createElement("h1", {className: "pointer", onClick: this.handleHome}, "The Clean Code Game"), 
-		      React.createElement("h2", null, "Версия C#")
+			      React.createElement("h1", {className: "pointer", onClick: this.handleHome}, "The Clean Code Game"), 
+			      React.createElement("h2", null, "Версия C#")
 		      )
-		    )
+		    ), 
+		    this.state.started && React.createElement(ProgressBar, {model: this.getModel()})
 		  )
 	},
 
@@ -43,7 +57,7 @@ var AppView = React.createClass({displayName: "AppView",
 	renderBody: function(){
 		if (this.state.started)
 			return React.createElement("div", {className: "container"}, 
-					React.createElement(GameView, {levels: this.props.levelsHolder.levels})
+					React.createElement(GameView, {model: gameModel})
 				)
 		else
 			return this.renderIntro();
@@ -66,26 +80,38 @@ var AppView = React.createClass({displayName: "AppView",
 	},
 
 	handleClick: function(){
-		if (this.props.levelsHolder.ready){
-			this.setState({
-				started: true
-			});
-		}
+		this.setState({
+			started: true
+		});
 	},
 
 	renderFooter: function(){
 		return React.createElement("div", {className: "footer"}, 
 			    React.createElement("div", {className: "container"}, 
 			      React.createElement("p", {className: "text-muted"}, 
-			        "© 2015 ", React.createElement("a", {href: "https://kontur.ru/career"}, "СКБ Контур")
+			        "© 2015 ", React.createElement("a", {href: "https://kontur.ru/career"}, "СКБ Контур"), ". Связаться с ", React.createElement("a", {href: "mailto:pe@kontur.ru"}, "автором"), "."
 			      )
 			    )
 			  );
 	}
 });
 
-React.render(React.createElement(AppView, {levelsHolder: levelsHolder}), document.getElementById("app"));
-},{"./GameView":6}],2:[function(require,module,exports){
+function getHash(){
+	if (window.location.hash !== undefined && window.location.hash.length > 0)
+		return Math.max(0, ~~window.location.hash.substring(1) - 1);
+	else
+		return 0;
+}
+
+var gameModel = new GameModel({
+	levelIndex: getHash(),
+	levels: levels,
+	score: 0,
+	maxScore: 0
+});
+
+React.render(React.createElement(AppView, {model: gameModel}), document.getElementById("app"));
+},{"./GameModel":5,"./GameView":7}],2:[function(require,module,exports){
 var BooksView = React.createClass({displayName: "BooksView",
 	books: [
 		{
@@ -219,7 +245,7 @@ var CodeSample = function(data) {
 };
 
 module.exports = CodeSample;
-},{"./utils":9,"lodash":undefined}],4:[function(require,module,exports){
+},{"./utils":11,"lodash":undefined}],4:[function(require,module,exports){
 var CodeView = React.createClass({displayName: "CodeView",
 	propTypes: {
 		code: React.PropTypes.string.isRequired,
@@ -263,6 +289,19 @@ var CodeView = React.createClass({displayName: "CodeView",
 
 module.exports = CodeView;
 },{}],5:[function(require,module,exports){
+var CodeSample = require("./CodeSample");
+
+var GameModel = Backbone.Model.extend({
+	level: function(index) {
+		index = index !== undefined  ? index : this.get('levelIndex');
+		if (index >= this.get('levels').length)
+			throw new Error("Invalid level " + index);
+		return new CodeSample(this.get('levels')[index]);
+	},
+})
+
+module.exports = GameModel;
+},{"./CodeSample":3}],6:[function(require,module,exports){
 var BooksView = require("./BooksView");
 
 var GameOverView = React.createClass({displayName: "GameOverView",
@@ -289,93 +328,48 @@ var GameOverView = React.createClass({displayName: "GameOverView",
 });
 
 module.exports = GameOverView;
-},{"./BooksView":2}],6:[function(require,module,exports){
+},{"./BooksView":2}],7:[function(require,module,exports){
 var CodeSample = require("./CodeSample");
 var LevelView = require("./LevelView");
 var ResultsView = require("./ResultsView");
 var GameOverView = require("./GameOverView");
-
-
-function removeHash () { 
-    history.pushState("", document.title, window.location.pathname + window.location.search);
-}
-
-function getHash(){
-	if (window.location.hash !== undefined && window.location.hash.length > 0)
-		return Math.max(0, ~~window.location.hash.substring(1) - 1);
-	else
-		return 0;
-}
-
+var tracker = require("./Tracker");
 
 var GameView = React.createClass({displayName: "GameView",
-	propTypes: {
-		levels: React.PropTypes.array.isRequired,
-	},
-
-	getInitialState: function() {
-		var levelIndex = getHash();
-		return {
-			levelIndex: levelIndex,
-			maxScore: 0,
-			score: 0,
-			time: new Date().getTime()
-		};
-	},
+	mixins: [Backbone.React.Component.mixin],
 
 	render: function() {
-		if (this.state.score < 0)
+		var m = this.getModel();
+		if (m.get('score') < 0)
 			return React.createElement(GameOverView, {onPlayAgain: this.handlePlayAgain});
-		else if (this.state.levelIndex >= this.props.levels.length){
-			_gaq.push(['_trackEvent', 'result', 'result.' + this.state.score, '']);
-			removeHash();
+		else if (m.get('levelIndex') >= m.get('levels').length){
 			return React.createElement(ResultsView, {	
-				score: this.state.score, 
-				maxScore: this.state.maxScore, 
+				score: m.get('score'), 
+				maxScore: m.get('maxScore'), 
 				onPlayAgain: this.handlePlayAgain});
 		}
 		else 
-			return React.createElement(LevelView, {
-					key: "level_" + this.state.levelIndex, 
-					level: this.state.levelIndex, 
-					score: this.state.score, 
-					codeSample: this.level(), 
-					onNext: this.handleNext});
-
-	},
-
-	level: function(index){
-		index = index !== undefined ? index : this.state.levelIndex;
-		if (index >= this.props.levels.length)
-			throw new Error("Invalid level " + index);
-		return new CodeSample(this.props.levels[index]);
-	},
-
-	handleNext: function(score){
-		var elapsed = new Date().getTime() - this.state.time;
-		var category = 'level-solved';
-		var event = category + '.' + this.state.levelIndex;
-		_gaq.push(['_trackEvent', category, event, event + '.' + elapsed]);
-		this.setState({
-			score: score,
-			maxScore: this.state.maxScore + this.level().bugsCount,
-			levelIndex: this.state.levelIndex+1,
-			time: new Date().getTime()
-		});
+			return React.createElement(LevelView, {key: m.get('levelIndex'), model: m});
 	},
 
 	handlePlayAgain: function(){
-		this.setState(this.getInitialState());
+		this.getModel().set(
+		{
+			levelIndex: 0,
+			score: 0,
+		});
 	}
 
 });
 
 module.exports = GameView;
-},{"./CodeSample":3,"./GameOverView":5,"./LevelView":7,"./ResultsView":8}],7:[function(require,module,exports){
+},{"./CodeSample":3,"./GameOverView":6,"./LevelView":8,"./ResultsView":9,"./Tracker":10}],8:[function(require,module,exports){
 var CodeView = require("./CodeView");
 var CodeSample = require("./CodeSample");
 var utils = require("./utils");
 var animate = utils.animate;
+var tracker = require("./Tracker");
+
 
 var HintButton = React.createClass({displayName: "HintButton",
 	propTypes: {
@@ -406,32 +400,26 @@ var HoverButton = React.createClass({displayName: "HoverButton",
 	render: function() {
 		if (this.props.enabled)
 			return React.createElement("span", {className: "tb-item", 
-					onMouseEnter: this.props.onEnter, 
-					onTouchStart: this.props.onEnter, 
-					onMouseLeave: this.props.onLeave, 
-					onTouchEnd: this.props.onLeave}, this.props.text)
+				onMouseEnter: this.props.onEnter, 
+				onTouchStart: this.props.onEnter, 
+				onMouseLeave: this.props.onLeave, 
+				onTouchEnd: this.props.onLeave}, this.props.text)
 		else
 			return React.createElement("span", {className: "tb-item disabled"}, this.props.text)
 	},
-
-
 });
 
 var LevelView = React.createClass({displayName: "LevelView",
-	propTypes: {
-		level: React.PropTypes.number.isRequired,
-		score: React.PropTypes.number.isRequired,
-		codeSample: React.PropTypes.instanceOf(CodeSample).isRequired,
-		onNext: React.PropTypes.func.isRequired
-	},
+	mixins: [Backbone.React.Component.mixin],
 
 	getInitialState: function() {
+		var level = this.getModel().level();
 		return {
-			codeSample : this.props.codeSample,
-			score : this.props.score,
+			codeSample : level,
 			descriptions: [],
-			availableHints: _.values(this.props.codeSample.bugs),
-			showOriginal: false
+			availableHints: _.values(level.bugs),
+			showOriginal: false,
+			solved: false
 		};
 	},
 
@@ -441,11 +429,11 @@ var LevelView = React.createClass({displayName: "LevelView",
 
 	handleMiss: function (line, ch, word){
 		word = word.trim().substring(0, 20);
-		var category = "miss."+this.props.codeSample.name;
+		var category = "miss."+this.state.codeSample.name;
 		var miss = category + "." + word;
 		console.log(miss);
 		if (!this.trackedMisses[miss]){
-			_gaq.push(['_trackEvent', category, miss, category + ' at ' + line + ':'+ch]);
+			tracker.missed(this.state.codeSample, miss);
 			this.trackedMisses[miss] = true;
 			this.reduceScore();
 		}
@@ -456,10 +444,11 @@ var LevelView = React.createClass({displayName: "LevelView",
 		var fixedCode = this.state.codeSample.fix(bug);
 		var lastHint = this.state.availableHints[0];
 		var newHints = _.filter(this.state.availableHints, function(h) { return h.name != bug.name });
-
+		this.getModel().set({
+			score: this.props.score + 1,
+		});
 		this.setState({
 			codeSample: fixedCode,
-			score: this.state.score + 1,
 			deltaScore: +1,
 			availableHints: newHints,
 			descriptions: descriptions
@@ -467,12 +456,12 @@ var LevelView = React.createClass({displayName: "LevelView",
 	},
 
 	reduceScore: function(){
+		this.getModel().set({
+			score: this.props.score - 1,
+		});
 		this.setState({
-			score: this.state.score - 1,
 			deltaScore: -1
 		});
-		if (this.state.score < 0)
-			this.handleNext(this.state.score);
 	},
 
 	handleClick: function(line, ch, word){
@@ -493,12 +482,12 @@ var LevelView = React.createClass({displayName: "LevelView",
 	},
 
 	handleUseHint: function(){
-		var category = "hint."+this.props.codeSample.name;
-		var hint = this.state.availableHints[0].description.substring(0, 20);
-		_gaq.push(['_trackEvent', category, category + "." + hint, category + "." + hint]);
+		tracker.hintUsed(this.state.codeSample, this.state.availableHints[0]);
+		this.getModel().set({
+			score: Math.max(this.props.score - 1, 0),
+		});
 		this.setState({
 			availableHints: this.state.availableHints.slice(1),
-			score: Math.max(this.state.score - 1, 0),
 			deltaScore: -1
 		});
 	},
@@ -513,12 +502,16 @@ var LevelView = React.createClass({displayName: "LevelView",
 	handleNext: function(){
 		animate(this.refs.round, "fadeOutLeft");
 		$(this.refs.round.getDOMNode()).one('webkitAnimationEnd mozAnimationEnd MSAnimationEnd oanimationend animationend', function(){
-			
-			console.log(this.state.score);
-			this.props.onNext(this.state.score);
+			var m = this.getModel();
+			this.setState({solved: true});
+			tracker.levelSolved(m.get('levelIndex'));
+			this.getModel().set({
+				maxScore: m.get('maxScore') + _.keys(m.level().bugs).length,
+				levelIndex: m.get('levelIndex')+1,
+			});
 		}.bind(this));		
 	},
-	
+
 	renderExplanations: function(){
 		if (this.state.descriptions.length == 0) return "";
 		return React.createElement("div", null, 
@@ -544,14 +537,16 @@ var LevelView = React.createClass({displayName: "LevelView",
 	},
 
 	render: function() {
-		var code = this.state.showOriginal ? this.props.codeSample : this.state.codeSample; //from props or from state?
-		var hasProgress = this.state.codeSample.bugsCount < this.props.codeSample.bugsCount;
+		var code = this.state.showOriginal ? this.getModel().level() : this.state.codeSample;
+		var hasProgress = this.state.codeSample.bugsCount < this.getModel().level();
+		if (this.state.solved) return null;
 		return  (
 			React.createElement("div", {className: "round", ref: "round"}, 
 			  React.createElement("div", {className: "row"}, 
 				React.createElement("div", {className: "col-sm-12"}, 
-					React.createElement("h2", null, "Уровень ", this.props.level+1, this.finished() && ". Пройден!"), 
-					React.createElement("p", null, "Найди и исправь все стилевые ошибки в коде. Кликай мышкой по ошибкам!"), 
+					React.createElement("h2", null, "Уровень ", this.props.levelIndex+1, this.finished() && ". Пройден!"), 
+					React.createElement("p", null, "Найди и исправь все стилевые ошибки в коде. Кликай мышкой по ошибкам.", React.createElement("br", null), 
+					"Каждая найденная ошибка: +1 балл. Каждый промах или подсказка: –1 балл."), 
 					React.createElement("div", {className: "code-container"}, 
 						React.createElement("span", {className: "code-toolbar"}, 
 							React.createElement(HoverButton, {text: "сравнить", enabled: hasProgress, onEnter: this.showOriginalCode, onLeave: this.showCurrentCode}), 
@@ -570,9 +565,9 @@ var LevelView = React.createClass({displayName: "LevelView",
 						React.createElement("div", {className: "pull-left"}, 
 							"Общий счёт:" 
 						), 
-						React.createElement("div", {className: "pull-left score-value", ref: "score"}, this.state.score), 
+						React.createElement("div", {className: "pull-left score-value", ref: "score"}, this.props.score), 
 						 this.state.deltaScore < 0
-							? React.createElement("div", {key: this.state.score, className: "pull-left minus-one animated fadeOutDown"}, " —1")
+							? React.createElement("div", {key: this.props.score, className: "pull-left minus-one animated fadeOutDown"}, " —1")
 							: null, 
 						React.createElement("div", {className: "clearfix"})
 					)
@@ -602,8 +597,14 @@ var LevelView = React.createClass({displayName: "LevelView",
 });
 
 module.exports=LevelView;
-},{"./CodeSample":3,"./CodeView":4,"./utils":9}],8:[function(require,module,exports){
+},{"./CodeSample":3,"./CodeView":4,"./Tracker":10,"./utils":11}],9:[function(require,module,exports){
 var BooksView = require("./BooksView");
+var utils = require("./utils");
+var tracker = require("./Tracker");
+
+function removeHash () { 
+	history.pushState("", document.title, window.location.pathname + window.location.search);
+}
 
 var ResultsView = React.createClass({displayName: "ResultsView",
 	propTypes: {
@@ -613,12 +614,9 @@ var ResultsView = React.createClass({displayName: "ResultsView",
 	},
 
 	componentDidMount: function() {
-        $("#uptolikescript").remove();
-        s = document.createElement('script');
-        s.id="uptolikescript";
-        s.type = 'text/javascript'; s.charset='UTF-8'; s.async = true;
-        s.src = ('https:' == window.location.protocol ? 'https' : 'http')  + '://w.uptolike.com/widgets/v1/uptolike.js';
-        document.getElementsByTagName('body')[0].appendChild(s);
+		tracker.finished(this.props.score);
+		removeHash();
+		utils.initUpToLike();
 	},
 
 	getScorePercentage: function(){
@@ -678,7 +676,30 @@ var ResultsView = React.createClass({displayName: "ResultsView",
 });
 
 module.exports = ResultsView;
-},{"./BooksView":2}],9:[function(require,module,exports){
+},{"./BooksView":2,"./Tracker":10,"./utils":11}],10:[function(require,module,exports){
+module.exports = {
+	levelSolved: function(levelIndex){
+		var category = 'level-solved';
+		var event = category + '.' + levelIndex;
+		_gaq.push(['_trackEvent', category, event, 'level-solved']);
+	},
+
+	hintUsed: function(level, hint){
+		var category = "hint."+level.name;
+		var hint = hint.description.substring(0, 20);
+		_gaq.push(['_trackEvent', category, category + "." + hint, category + "." + hint]);
+	},
+
+	finished: function(score){
+		_gaq.push(['_trackEvent', 'result', 'result.' + score, 'result']);
+	},
+
+	missed: function(level, miss){
+		var category = "miss." + level.name;
+		_gaq.push(['_trackEvent', category, miss, category]);
+	}
+};
+},{}],11:[function(require,module,exports){
 'use strict';
 
 module.exports.animate = function(comp, effect){
@@ -691,7 +712,18 @@ module.exports.animate = function(comp, effect){
     );
 };
 
+module.exports.initUpToLike = function(){
+	$("#uptolikescript").remove();
+	var s = document.createElement('script');
+	s.id="uptolikescript";
+	s.type = 'text/javascript'; s.charset='UTF-8'; s.async = true;
+	s.src = ('https:' == window.location.protocol ? 'https' : 'http')  + '://w.uptolike.com/widgets/v1/uptolike.js';
+	document.getElementsByTagName('body')[0].appendChild(s);
+};
+
 module.exports.escapeRe = function(str) {
 	return str.replace(/[\-\[\]\/\{\}\(\)\*\+\?\.\\\^\$\|]/g, "\\$&");
 };
+
+
 },{}]},{},[1]);
