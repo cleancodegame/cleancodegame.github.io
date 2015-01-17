@@ -1,6 +1,7 @@
 (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
 var GameModel = require("./GameModel");
 var GameView = require("./GameView");
+var tracker = require("./Tracker");
 
 var ProgressBar = React.createClass({displayName: "ProgressBar",
 	mixins: [Backbone.React.Component.mixin],
@@ -85,11 +86,15 @@ var AppView = React.createClass({displayName: "AppView",
 		});
 	},
 
+	handleKonturClick: function(){
+		tracker.track("career");
+	},
+
 	renderFooter: function(){
 		return React.createElement("div", {className: "footer"}, 
 			    React.createElement("div", {className: "container"}, 
 			      React.createElement("p", {className: "text-muted"}, 
-			        "© 2015 ", React.createElement("a", {href: "https://kontur.ru/career"}, "СКБ Контур"), ". Связаться с ", React.createElement("a", {href: "mailto:pe@kontur.ru"}, "автором"), "."
+			        "© 2015 ", React.createElement("a", {href: "https://kontur.ru/career", onClick: this.handleKonturClick}, "СКБ Контур"), ". Связаться с ", React.createElement("a", {href: "mailto:pe@kontur.ru"}, "автором"), "."
 			      )
 			    )
 			  );
@@ -111,7 +116,7 @@ var gameModel = new GameModel({
 });
 
 React.render(React.createElement(AppView, {model: gameModel}), document.getElementById("app"));
-},{"./GameModel":5,"./GameView":7}],2:[function(require,module,exports){
+},{"./GameModel":5,"./GameView":7,"./Tracker":10}],2:[function(require,module,exports){
 var BooksView = React.createClass({displayName: "BooksView",
 	books: [
 		{
@@ -697,6 +702,10 @@ module.exports = {
 	missed: function(level, miss){
 		var category = "miss." + level.name;
 		_gaq.push(['_trackEvent', category, miss, category]);
+	},
+	
+	track: function(event){
+		_gaq.push(['_trackEvent', event, event, event]);	
 	}
 };
 },{}],11:[function(require,module,exports){
