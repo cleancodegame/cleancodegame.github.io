@@ -538,7 +538,7 @@ var LevelView = React.createClass({displayName: "LevelView",
 
 	render: function() {
 		var code = this.state.showOriginal ? this.getModel().level() : this.state.codeSample;
-		var hasProgress = this.state.codeSample.bugsCount < this.getModel().level();
+		var hasProgress = this.state.codeSample.bugsCount < this.getModel().level().bugsCount;
 		if (this.state.solved) return null;
 		return  (
 			React.createElement("div", {className: "round", ref: "round"}, 
