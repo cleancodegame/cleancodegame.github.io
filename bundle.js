@@ -58,7 +58,7 @@ var AppView = React.createClass({displayName: "AppView",
 	renderBody: function(){
 		if (this.state.started)
 			return React.createElement("div", {className: "container"}, 
-					React.createElement(GameView, {model: gameModel})
+					React.createElement(GameView, {model: this.getModel()})
 				)
 		else
 			return this.renderIntro();
@@ -101,21 +101,7 @@ var AppView = React.createClass({displayName: "AppView",
 	}
 });
 
-function getHash(){
-	if (window.location.hash !== undefined && window.location.hash.length > 0)
-		return Math.max(0, ~~window.location.hash.substring(1) - 1);
-	else
-		return 0;
-}
-
-var gameModel = new GameModel({
-	levelIndex: getHash(),
-	levels: levels,
-	score: 0,
-	maxScore: 0
-});
-
-React.render(React.createElement(AppView, {model: gameModel}), document.getElementById("app"));
+React.render(React.createElement(AppView, {model: new GameModel()}), document.getElementById("app"));
 },{"./GameModel":5,"./GameView":7,"./Tracker":10}],2:[function(require,module,exports){
 var BooksView = React.createClass({displayName: "BooksView",
 	books: [
@@ -295,13 +281,61 @@ var CodeView = React.createClass({displayName: "CodeView",
 module.exports = CodeView;
 },{}],5:[function(require,module,exports){
 var CodeSample = require("./CodeSample");
+// require levels variable
+
+function getHash(){
+	if (window && window.location && window.location.hash !== undefined && window.location.hash.length > 0)
+		return Math.max(0, ~~window.location.hash.substring(1) - 1);
+	else
+		return 0;
+}
+
 
 var GameModel = Backbone.Model.extend({
-	level: function(index) {
-		index = index !== undefined  ? index : this.get('levelIndex');
-		if (index >= this.get('levels').length)
-			throw new Error("Invalid level " + index);
-		return new CodeSample(this.get('levels')[index]);
+	defaults: {
+		levelIndex: getHash(),
+		levels: levels,
+		level: new CodeSample(levels[getHash()]),
+		originalLevel: new CodeSample(levels[getHash()]),
+		score: 0,
+		maxScore: 0,
+		penalty: {},
+		levelPenalty: [],
+	},
+
+	finishLevel: function(){
+		var newLevelIndex = this.get('levelIndex')+1;
+		var newLevel = newLevelIndex < this.get('levels').length ? new CodeSample(levels[newLevelIndex]) : null;
+		var penalty = this.get('penalty');
+		var levelPenalty = this.get('levelPenalty');
+		_(levelPenalty).uniq().forEach(function(t){ penalty[t] = ~~penalty[t] + 1});
+		this.set({
+			maxScore: this.get('maxScore') + this.get('originalLevel').bugsCount,
+			levelIndex: this.get('levelIndex')+1,
+			level: newLevel,
+			originalLevel: newLevel,
+			penalty: penalty,
+			levelPenalty: [],
+		});
+	},
+
+	updatePenalty: function(){
+		var bugs = _.values(this.get('level').bugs);
+		return _.union(_.pluck(bugs, 'type'), this.get('levelPenalty'));
+	},
+
+	useHint: function(){
+		this.set({
+			score: Math.max(this.get('score') - 1, 0),
+			levelPenalty: this.updatePenalty()
+		});
+	},
+
+	missClick: function(){
+		this.set({
+			score: this.get('score') - 1,
+			levelPenalty: this.updatePenalty()
+		});
 	},
 })
 
@@ -348,10 +382,7 @@ var GameView = React.createClass({displayName: "GameView",
 		if (m.get('score') < 0)
 			return React.createElement(GameOverView, {onPlayAgain: this.handlePlayAgain});
 		else if (m.get('levelIndex') >= m.get('levels').length){
-			return React.createElement(ResultsView, {	
-				score: m.get('score'), 
-				maxScore: m.get('maxScore'), 
-				onPlayAgain: this.handlePlayAgain});
+			return React.createElement(ResultsView, {model: m, onPlayAgain: this.handlePlayAgain});
 		}
 		else 
 			return React.createElement(LevelView, {key: m.get('levelIndex'), model: m});
@@ -418,10 +449,9 @@ var LevelView = React.createClass({displayName: "LevelView",
 	mixins: [Backbone.React.Component.mixin],
 
 	getInitialState: function() {
-		var level = this.getModel().level();
+		var level = this.getModel().get('level');
 		return {
-			codeSample : level,
-			descriptions: [],
+			explanations: [],
 			availableHints: _.values(level.bugs),
 			showOriginal: false,
 			solved: false
@@ -429,41 +459,39 @@ var LevelView = React.createClass({displayName: "LevelView",
 	},
 
 	finished: function(){
-		return this.state.codeSample.bugsCount == 0;
+		return this.props.level.bugsCount == 0;
 	},
 
 	handleMiss: function (line, ch, word){
 		word = word.trim().substring(0, 20);
-		var category = "miss."+this.state.codeSample.name;
+		var category = "miss."+this.props.level.name;
 		var miss = category + "." + word;
 		console.log(miss);
 		if (!this.trackedMisses[miss]){
-			tracker.missed(this.state.codeSample, miss);
+			tracker.missed(this.props.level, miss);
 			this.trackedMisses[miss] = true;
 			this.reduceScore();
 		}
 	},
 
 	handleFix: function(bug){
-		var descriptions = _.union(this.state.descriptions, [bug.description]);
-		var fixedCode = this.state.codeSample.fix(bug);
+		var explanations = _.union(this.state.explanations, [bug.description]);
+		var fixedCode = this.props.level.fix(bug);
 		var lastHint = this.state.availableHints[0];
 		var newHints = _.filter(this.state.availableHints, function(h) { return h.name != bug.name });
 		this.getModel().set({
 			score: this.props.score + 1,
+			level: fixedCode,
 		});
 		this.setState({
-			codeSample: fixedCode,
 			deltaScore: +1,
 			availableHints: newHints,
-			descriptions: descriptions
+			explanations: explanations
 		});
 	},
 
 	reduceScore: function(){
-		this.getModel().set({
-			score: this.props.score - 1,
-		});
+		this.getModel().missClick();
 		this.setState({
 			deltaScore: -1
 		});
@@ -471,7 +499,7 @@ var LevelView = React.createClass({displayName: "LevelView",
 
 	handleClick: function(line, ch, word){
 		if (this.finished()) return;
-		var bug = this.state.codeSample.findBug(line, ch);
+		var bug = this.props.level.findBug(line, ch);
 
 		if (bug != null){
 			this.handleFix(bug);
@@ -487,50 +515,39 @@ var LevelView = React.createClass({displayName: "LevelView",
 	},
 
 	handleUseHint: function(){
-		tracker.hintUsed(this.state.codeSample, this.state.availableHints[0]);
-		this.getModel().set({
-			score: Math.max(this.props.score - 1, 0),
-		});
+		tracker.hintUsed(this.props.level, this.state.availableHints[0]);
+		this.getModel().useHint();
 		this.setState({
 			availableHints: this.state.availableHints.slice(1),
 			deltaScore: -1
 		});
 	},
 
-	componentDidUpdate: function(prevProps, prevState) {
-		if (prevState.codeSample.bugsCount != this.state.codeSample.bugsCount)
-			animate(this.refs.bugsCount, "bounce");
-		if (this.finished && prevState.codeSample.bugsCount > 0)
-			animate(this.refs.nextButton, "flipInX");
-	},
-
 	handleNext: function(){
 		animate(this.refs.round, "fadeOutLeft");
 		$(this.refs.round.getDOMNode()).one('webkitAnimationEnd mozAnimationEnd MSAnimationEnd oanimationend animationend', function(){
-			var m = this.getModel();
 			this.setState({solved: true});
-			tracker.levelSolved(m.get('levelIndex'));
-			this.getModel().set({
-				maxScore: m.get('maxScore') + _.keys(m.level().bugs).length,
-				levelIndex: m.get('levelIndex')+1,
-			});
+			tracker.levelSolved(this.props.levelIndex);
+			this.getModel().finishLevel();
 		}.bind(this));		
 	},
 
 	renderExplanations: function(){
-		if (this.state.descriptions.length == 0) return "";
+		if (this.state.explanations.length == 0) return "";
 		return React.createElement("div", null, 
 			React.createElement("h3", null, "Объяснения:"), 
 			React.createElement("ol", null, 
-				 this.state.descriptions.map(function(d, i){ return React.createElement("li", {key: i}, d) }) 
+				 this.state.explanations.map(function(d, i){ return React.createElement("li", {key: i}, d) }) 
 			)
 		)
 	},
 
 	renderNextButton: function(){
 		if (!this.finished()) return "";
+		var classes = "btn btn-lg btn-primary btn-styled btn-next";
+		if (this.state.deltaScore > 0) classes += " animated flipInX";
 		return React.createElement("button", {ref: "nextButton", 
-				className: "btn btn-lg btn-primary btn-styled btn-next", 
+				className: classes, 
 				onClick: this.handleNext}, "Дальше")
 	},
 
@@ -540,10 +557,17 @@ var LevelView = React.createClass({displayName: "LevelView",
 		else
 			return undefined;
 	},
+	renderBugsCount: function(){
+		var classes = this.state.deltaScore > 0 ? "animated bounce" : "";
+		var bugsCount = this.props.level.bugsCount;
+		return React.createElement("div", {className: "score"}, 
+				"Осталось найти: ", React.createElement("span", {key: bugsCount, className: classes}, bugsCount)
+			)
+	},
 
 	render: function() {
-		var code = this.state.showOriginal ? this.getModel().level() : this.state.codeSample;
-		var hasProgress = this.state.codeSample.bugsCount < this.getModel().level().bugsCount;
+		var code = this.state.showOriginal ? this.props.originalLevel : this.props.level;
+		var hasProgress = this.props.level.bugsCount < this.props.originalLevel.bugsCount;
 		if (this.state.solved) return null;
 		return  (
 			React.createElement("div", {className: "round", ref: "round"}, 
@@ -578,9 +602,7 @@ var LevelView = React.createClass({displayName: "LevelView",
 					)
 			  	), 
 			  	React.createElement("div", {className: "col-sm-5"}, 
-					React.createElement("div", {className: "score"}, 
-						"Осталось найти: ", React.createElement("span", {ref: "bugsCount"}, this.state.codeSample.bugsCount)
-					)
+					this.renderBugsCount()
 			  	)
 			  	), 
 			  	React.createElement("div", {className: "row"}, 
@@ -612,9 +634,9 @@ function removeHash () {
 }
 
 var ResultsView = React.createClass({displayName: "ResultsView",
+	mixins: [Backbone.React.Component.mixin],
+
 	propTypes: {
-		score: React.PropTypes.number.isRequired,
-		maxScore: React.PropTypes.number.isRequired,
 		onPlayAgain: React.PropTypes.func.isRequired
 	},
 
@@ -651,6 +673,7 @@ var ResultsView = React.createClass({displayName: "ResultsView",
 			React.createElement("div", null, 
 				React.createElement("h2", null, headerPhrase), 
 				this.renderScoreInfo(), 
+				this.renderMistakeDetails(), 
 				this.renderAgainButton(), 
 				React.createElement(BooksView, null), 
 				React.createElement("p", null, 
@@ -663,6 +686,23 @@ var ResultsView = React.createClass({displayName: "ResultsView",
 	renderScoreInfo: function(){
 		return (
 			React.createElement("p", null, this.getScorePercentage(), "% очков (", this.props.score, " из ", this.props.maxScore, " возможных).")
+			);
+	},
+
+	renderMistakeDetails: function(){
+		var types = _.sortBy(_.keys(this.props.penalty), function(t){return -this.props.penalty[t]}, this);
+		console.log(types);
+		if (types.length == 0) return "";
+		return React.createElement("div", null, 
+				React.createElement("h3", null, "Статистика ошибок"), 
+				React.createElement("table", {className: "table"}, 
+				_.map(types, function(t){
+					return React.createElement("tr", {key: t}, 
+							React.createElement("th", null, t), 
+							React.createElement("td", null, this.props.penalty[t])
+						)
+				}, this)
+			)
 			);
 	},
 

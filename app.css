@@ -65,9 +65,7 @@ body {
 }
 .header-progress .progress-tile.solved {
   background-color: #5b9bd5;
-}
-.header-progress .progress-tile.partial-solved {
-  background-color: lightyellow;
+  transition: background 1s ease;
 }
 .container {
   position: relative;
