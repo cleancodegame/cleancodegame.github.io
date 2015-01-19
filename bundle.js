@@ -727,31 +727,26 @@ module.exports = ResultsView;
 module.exports = {
 	levelSolved: function(levelIndex){
 		var category = 'level-solved';
-		var event = category + '.' + levelIndex;
-		this._track(category, event, levelIndex);
+		this.track(category, levelIndex);
 	},
 
 	hintUsed: function(level, hint){
 		var category = "hint."+level.name;
 		var hint = hint.description.substring(0, 20);
-		this._track(category, category + "." + hint);
+		this.track(category, hint);
 	},
 
 	finished: function(score){
-		this._track('result', 'result.' + score, score);
+		this.track('result', score);
 	},
 
 	missed: function(level, miss){
-		var category = "miss." + level.name;
-		this._track(category, miss);
+		this.track("miss", level.name);
 	},
 	
 	track: function(event, value){
-		this._track(event, event, value);
-	},
-
-	_track: function(cat, ev, value){
-		console.log(['track: ', cat, ev, value]);
+		var ev = event + "." + value;
+		console.log(['track: ', ev]);
 		_gaq.push(['_trackEvent', cat, ev, ev, value]);
 	}
 };
