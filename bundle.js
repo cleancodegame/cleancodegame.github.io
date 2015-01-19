@@ -731,7 +731,7 @@ module.exports = {
 	},
 
 	hintUsed: function(level, hint){
-		var category = "hint."+level.name;
+		var category = "hint." + level.name;
 		var hint = hint.description.substring(0, 20);
 		this.track(category, hint);
 	},
@@ -741,7 +741,7 @@ module.exports = {
 	},
 
 	missed: function(level, miss){
-		this.track("miss", level.name);
+		this.track("miss." + level.name, miss);
 	},
 	
 	track: function(event, value){
