@@ -346,10 +346,13 @@ var GameModel = Backbone.Model.extend({
 module.exports = GameModel;
 },{"./CodeSample":3}],6:[function(require,module,exports){
 var BooksView = require("./BooksView");
+var tracker = require("./Tracker");
 
 var GameOverView = React.createClass({displayName: "GameOverView",
-	propTypes: {
-		onPlayAgain: React.PropTypes.func.isRequired
+	mixins: [Backbone.React.Component.mixin],
+
+	componentDidMount: function() {
+		tracker.track("fail_on", this.props.levelIndex);
 	},
 
 	render: function() {
@@ -365,13 +368,18 @@ var GameOverView = React.createClass({displayName: "GameOverView",
 				"Впрочем, возможно, вам просто не повезло. Попробуйте ещё раз!"
 			), 
 
-			React.createElement("button", {className: "btn btn-lg btn-primary btn-styled", onClick: this.props.onPlayAgain}, "Ещё раз")
+			React.createElement("button", {className: "btn btn-lg btn-primary btn-styled", onClick: this.handlePlayAgain}, "Ещё раз")
 		);
+	},
+
+	handlePlayAgain: function(){
+		tracker.track("again_after_fail_on", this.props.levelIndex);
+		this.getModel().reset();
 	},
 });
 
 module.exports = GameOverView;
-},{"./BooksView":2}],7:[function(require,module,exports){
+},{"./BooksView":2,"./Tracker":10}],7:[function(require,module,exports){
 var CodeSample = require("./CodeSample");
 var LevelView = require("./LevelView");
 var ResultsView = require("./ResultsView");
@@ -384,18 +392,13 @@ var GameView = React.createClass({displayName: "GameView",
 	render: function() {
 		var m = this.getModel();
 		if (m.get('score') < 0)
-			return React.createElement(GameOverView, {onPlayAgain: this.handlePlayAgain});
+			return React.createElement(GameOverView, {model: m});
 		else if (m.get('levelIndex') >= m.get('levels').length){
-			return React.createElement(ResultsView, {model: m, onPlayAgain: this.handlePlayAgain});
+			return React.createElement(ResultsView, {model: m});
 		}
 		else 
 			return React.createElement(LevelView, {key: m.get('levelIndex'), model: m});
 	},
-
-	handlePlayAgain: function(){
-		this.getModel().reset();
-	}
-
 });
 
 module.exports = GameView;
@@ -466,7 +469,6 @@ var LevelView = React.createClass({displayName: "LevelView",
 		word = word.trim().substring(0, 20);
 		var category = "miss."+this.props.level.name;
 		var miss = category + "." + word;
-		console.log(miss);
 		if (!this.trackedMisses[miss]){
 			tracker.missed(this.props.level, miss);
 			this.trackedMisses[miss] = true;
@@ -636,10 +638,6 @@ function removeHash () {
 var ResultsView = React.createClass({displayName: "ResultsView",
 	mixins: [Backbone.React.Component.mixin],
 
-	propTypes: {
-		onPlayAgain: React.PropTypes.func.isRequired
-	},
-
 	componentDidMount: function() {
 		tracker.finished(this.props.score);
 		removeHash();
@@ -691,7 +689,6 @@ var ResultsView = React.createClass({displayName: "ResultsView",
 
 	renderMistakeDetails: function(){
 		var types = _.sortBy(_.keys(this.props.penalty), function(t){return -this.props.penalty[t]}, this);
-		console.log(types);
 		if (types.length == 0) return "";
 		return React.createElement("div", null, 
 				React.createElement("h3", null, "Статистика ошибок"), 
@@ -707,7 +704,12 @@ var ResultsView = React.createClass({displayName: "ResultsView",
 	},
 
 	renderAgainButton: function(){
-		return React.createElement("p", null, React.createElement("a", {href: "#", onClick: this.props.onPlayAgain}, "Ещё разик?"))
+		return React.createElement("p", null, React.createElement("a", {href: "#", onClick: this.handlePlayAgain}, "Ещё разик?"))
+	},
+
+	handlePlayAgain: function(){
+		tracker.track("again_after_success_with", this.props.score);
+		this.getModel().reset();
 	},
 
 	renderShareButtons: function(){
@@ -726,26 +728,31 @@ module.exports = {
 	levelSolved: function(levelIndex){
 		var category = 'level-solved';
 		var event = category + '.' + levelIndex;
-		_gaq.push(['_trackEvent', category, event, 'level-solved']);
+		this._track(category, event, levelIndex);
 	},
 
 	hintUsed: function(level, hint){
 		var category = "hint."+level.name;
 		var hint = hint.description.substring(0, 20);
-		_gaq.push(['_trackEvent', category, category + "." + hint, category + "." + hint]);
+		this._track(category, category + "." + hint);
 	},
 
 	finished: function(score){
-		_gaq.push(['_trackEvent', 'result', 'result.' + score, 'result']);
+		this._track('result', 'result.' + score, score);
 	},
 
 	missed: function(level, miss){
 		var category = "miss." + level.name;
-		_gaq.push(['_trackEvent', category, miss, category]);
+		this._track(category, miss);
 	},
 	
-	track: function(event){
-		_gaq.push(['_trackEvent', event, event, event]);	
+	track: function(event, value){
+		this._track(event, event, value);
+	},
+
+	_track: function(cat, ev, value){
+		console.log(['track: ', cat, ev, value]);
+		_gaq.push(['_trackEvent', cat, ev, ev, value]);
 	}
 };
 },{}],11:[function(require,module,exports){

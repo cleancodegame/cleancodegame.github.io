@@ -93,7 +93,7 @@ body {
 .btn-styled {
   width: 280px;
   height: 70px;
-  font-family: 'Bookman Old Style', 'Times New Roman';
+  font-family: "Segoe UI Light", "Segoe UI", "Helvetica Neue", "Arial", "Tahoma", sans-serif;
   font-size: 24pt;
   background-color: #5b9bd5;
   border-radius: 0px;
