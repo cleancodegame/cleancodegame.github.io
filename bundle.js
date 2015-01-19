@@ -747,7 +747,7 @@ module.exports = {
 	track: function(event, value){
 		var ev = event + "." + value;
 		console.log(['track: ', ev]);
-		_gaq.push(['_trackEvent', cat, ev, ev, value]);
+		_gaq.push(['_trackEvent', event, ev, ev, value]);
 	}
 };
 },{}],11:[function(require,module,exports){
