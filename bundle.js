@@ -651,7 +651,11 @@ var ResultsView = React.createClass({displayName: "ResultsView",
 
 	render: function() {
 		var rate = this.getScorePercentage();
-		if (rate == 100) 
+		if (rate > 100)
+			return this.renderVerdict(
+				"Ого! Да перед нами читер!",
+				"Поделись этой игрой с коллегами, докажи, что разбираешься в чужом коде лучше них! :D");
+		else if (rate == 100) 
 			return this.renderVerdict(
 				"Ого! Да перед нами профи!", 
 				"Раздражает неряшливый код коллег? Поделись с ними этой игрой, и их код станет чуточку лучше! ;-)");
@@ -722,6 +726,7 @@ var ResultsView = React.createClass({displayName: "ResultsView",
 });
 
 module.exports = ResultsView;
+
 },{"./BooksView":2,"./Tracker":10,"./utils":11}],10:[function(require,module,exports){
 module.exports = {
 	levelSolved: function(levelIndex){
