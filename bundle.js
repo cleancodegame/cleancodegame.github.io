@@ -3,22 +3,7 @@ var GameModel = require("./GameModel");
 var GameView = require("./GameView");
 var tracker = require("./Tracker");
 
-var ProgressBar = React.createClass({displayName: "ProgressBar",
-	mixins: [Backbone.React.Component.mixin],
-
-	render: function() {
-		return React.createElement("table", {className: "header-progress"}, 
-					React.createElement("tr", null, 
-						
-							_.map(_.keys(this.props.levels), function(level, i){
-								var classes = "progress-tile" + ((i < this.props.levelIndex) ? " solved" : "");
-								return React.createElement("td", {key: level.name, className: classes})
-							}.bind(this))
-						
-					)
-				)
-	},
-});
+var ProgressBar = require("./ProgressBar");
 
 var AppView = React.createClass({displayName: "AppView",
 	mixins: [Backbone.React.Component.mixin],
@@ -102,7 +87,7 @@ var AppView = React.createClass({displayName: "AppView",
 });
 
 React.render(React.createElement(AppView, {model: new GameModel()}), document.getElementById("app"));
-},{"./GameModel":5,"./GameView":7,"./Tracker":10}],2:[function(require,module,exports){
+},{"./GameModel":5,"./GameView":7,"./ProgressBar":11,"./Tracker":14}],2:[function(require,module,exports){
 var BooksView = React.createClass({displayName: "BooksView",
 	books: [
 		{
@@ -119,7 +104,9 @@ var BooksView = React.createClass({displayName: "BooksView",
 	render: function() {
 		return (
 			React.createElement("div", null, 
-				React.createElement("p", null, "Больше и подробнее про чистый код можно узнать из этих замечательных книг:"), 
+				React.createElement("p", null, 
+				"Далеко не все аспекты чистого кода можно раскрыть в такой короткой и простой игре." + ' ' +
+				"Больше и подробнее можно узнать из этих замечательных книг:"), 
 				React.createElement("div", {className: "books pull-left"}, 
 					_(this.books).map(function(b){
 						return React.createElement("a", {className: "book", key: b.title, target: "blank", 
@@ -145,6 +132,8 @@ var CodeSample = function(data) {
 	this.name = data.name;
 	this.code = data.code.replace('\r', '');
 	this.bugs = data.bugs;
+	this.instruction = data.instruction;
+	this.learning = data.learning;
 	this.bugsCount = _.keys(this.bugs).length;
 
 	parseCode();
@@ -230,13 +219,15 @@ var CodeSample = function(data) {
 		return new CodeSample({
 			name: this.name,
 			code: code2,
-			bugs: bugs2
+			bugs: bugs2,
+			instruction: this.instruction,
+			learning: this.learning
 		});
 	}
 };
 
 module.exports = CodeSample;
-},{"./utils":11,"lodash":undefined}],4:[function(require,module,exports){
+},{"./utils":15,"lodash":undefined}],4:[function(require,module,exports){
 var CodeView = React.createClass({displayName: "CodeView",
 	propTypes: {
 		code: React.PropTypes.string.isRequired,
@@ -256,8 +247,9 @@ var CodeView = React.createClass({displayName: "CodeView",
 		this.getDOMNode().onmouseup =
 			function(ev){
 				var sel = this.editor.doc.sel.ranges[0].head;
-				var word = $(ev.target).text();
-				this.props.onClick(sel.line, sel.ch, word);
+				var $el = $(ev.target);
+				var word = $el.text();
+				this.props.onClick(sel.line, sel.ch, word, $el);
 			}.bind(this);
 	},
 
@@ -297,6 +289,7 @@ var GameModel = Backbone.Model.extend({
 		levels: levels,
 		level: new CodeSample(levels[getHash()]),
 		originalLevel: new CodeSample(levels[getHash()]),
+		prevScore: 0,
 		score: 0,
 		maxScore: 0,
 		penalty: {},
@@ -323,23 +316,38 @@ var GameModel = Backbone.Model.extend({
 		});
 	},
 
-	updatePenalty: function(){
-		var bugs = _.values(this.get('level').bugs);
-		return _.union(_.pluck(bugs, 'type'), this.get('levelPenalty'));
+	fixBug: function(bug){
+		var fixedCode = this.get('level').fix(bug);
+		this.set({
+			prevScore: this.get('score'),
+			score: this.get('score') + 1,
+			level: fixedCode,
+		});
 	},
 
 	useHint: function(){
+		if (~~this.get('level').learning) return;
+		var newScore = Math.max(this.get('score') - 1, 0);
+		this.decreaseScore(newScore);
+	},
+
+	missClick: function(){
+		if (~~this.get('level').learning) return;
+		this.decreaseScore(this.get('score') - 1);
+	},
+
+	decreaseScore: function(newScore){
+		var prevScore = this.get('score');
 		this.set({
-			score: Math.max(this.get('score') - 1, 0),
+			prevScore: prevScore,
+			score: newScore,
 			levelPenalty: this.updatePenalty()
 		});
 	},
 
-	missClick: function(){
-		this.set({
-			score: this.get('score') - 1,
-			levelPenalty: this.updatePenalty()
-		});
+	updatePenalty: function(){
+		var bugs = _.values(this.get('level').bugs);
+		return _.union(_.pluck(bugs, 'type'), this.get('levelPenalty'));
 	},
 })
 
@@ -379,7 +387,7 @@ var GameOverView = React.createClass({displayName: "GameOverView",
 });
 
 module.exports = GameOverView;
-},{"./BooksView":2,"./Tracker":10}],7:[function(require,module,exports){
+},{"./BooksView":2,"./Tracker":14}],7:[function(require,module,exports){
 var CodeSample = require("./CodeSample");
 var LevelView = require("./LevelView");
 var ResultsView = require("./ResultsView");
@@ -402,33 +410,8 @@ var GameView = React.createClass({displayName: "GameView",
 });
 
 module.exports = GameView;
-},{"./CodeSample":3,"./GameOverView":6,"./LevelView":8,"./ResultsView":9,"./Tracker":10}],8:[function(require,module,exports){
-var CodeView = require("./CodeView");
-var CodeSample = require("./CodeSample");
-var utils = require("./utils");
-var animate = utils.animate;
-var tracker = require("./Tracker");
-
-
-var HintButton = React.createClass({displayName: "HintButton",
-	propTypes: {
-		text: React.PropTypes.string,
-		onUsed: React.PropTypes.func
-	},
-
-	handleClick: function(){
-		bootbox.alert(this.props.text, this.props.onUsed);
-	},
-
-	render: function() {
-		if (this.props.text !== undefined)
-			return React.createElement("span", {className: "tb-item", onClick: this.handleClick}, "подсказка");
-		else 
-			return React.createElement("span", {className: "tb-item disabled"}, "подсказок нет")
-	}
-});
-
-var HoverButton = React.createClass({displayName: "HoverButton",
+},{"./CodeSample":3,"./GameOverView":6,"./LevelView":9,"./ResultsView":13,"./Tracker":14}],8:[function(require,module,exports){
+module.exports =  React.createClass({displayName: "exports",
 	propTypes: {
 		text: React.PropTypes.string.isRequired,
 		enabled: React.PropTypes.bool.isRequired,
@@ -447,6 +430,17 @@ var HoverButton = React.createClass({displayName: "HoverButton",
 			return React.createElement("span", {className: "tb-item disabled"}, this.props.text)
 	},
 });
+
+
+},{}],9:[function(require,module,exports){
+var CodeView = require("./CodeView");
+var CodeSample = require("./CodeSample");
+var HoverButton = require("./HoverButton");
+var MessageButton = require("./MessageButton");
+
+var utils = require("./utils");
+var animate = utils.animate;
+var tracker = require("./Tracker");
 
 var LevelView = React.createClass({displayName: "LevelView",
 	mixins: [Backbone.React.Component.mixin],
@@ -477,15 +471,9 @@ var LevelView = React.createClass({displayName: "LevelView",
 
 	handleFix: function(bug){
 		var explanations = _.union(this.state.explanations, [bug.description]);
-		var fixedCode = this.props.level.fix(bug);
-		var lastHint = this.state.availableHints[0];
 		var newHints = _.filter(this.state.availableHints, function(h) { return h.name != bug.name });
-		this.getModel().set({
-			score: this.props.score + 1,
-			level: fixedCode,
-		});
+		this.getModel().fixBug(bug);
 		this.setState({
-			deltaScore: +1,
 			availableHints: newHints,
 			explanations: explanations
 		});
@@ -493,26 +481,24 @@ var LevelView = React.createClass({displayName: "LevelView",
 
 	reduceScore: function(){
 		this.getModel().missClick();
-		this.setState({
-			deltaScore: -1
-		});
 	},
 
-	handleClick: function(line, ch, word){
+	handleClick: function(line, ch, word, $target){
 		if (this.finished()) return;
 		var bug = this.props.level.findBug(line, ch);
-
 		if (bug != null){
 			this.handleFix(bug);
 		}
 		else {
-			this.handleMiss(line, ch, word);
+			utils.animate$($target, "shake", function(){
+				this.handleMiss(line, ch, word);
+			}.bind(this));
 		}
 	},
 
 	componentDidMount: function() {
 		this.trackedMisses = {};
-		animate(this.refs.round, "fadeInRight");
+		utils.animate(this.refs.round, "fadeInRight");
 	},
 
 	handleUseHint: function(){
@@ -520,12 +506,11 @@ var LevelView = React.createClass({displayName: "LevelView",
 		this.getModel().useHint();
 		this.setState({
 			availableHints: this.state.availableHints.slice(1),
-			deltaScore: -1
 		});
 	},
 
 	handleNext: function(){
-		animate(this.refs.round, "fadeOutLeft");
+		utils.animate(this.refs.round, "fadeOutLeft");
 		$(this.refs.round.getDOMNode()).one('webkitAnimationEnd mozAnimationEnd MSAnimationEnd oanimationend animationend', function(){
 			this.setState({solved: true});
 			tracker.levelSolved(this.props.levelIndex);
@@ -546,8 +531,8 @@ var LevelView = React.createClass({displayName: "LevelView",
 	renderNextButton: function(){
 		if (!this.finished()) return "";
 		var classes = "btn btn-lg btn-primary btn-styled btn-next";
-		if (this.state.deltaScore > 0) classes += " animated flipInX";
-		return React.createElement("button", {ref: "nextButton", 
+		if (this.props.prevScore < this.props.score) classes += " animated flipInX";
+		return React.createElement("button", {ref: "nextButton", key: this.props.levelIndex, 
 				className: classes, 
 				onClick: this.handleNext}, "Дальше")
 	},
@@ -559,7 +544,7 @@ var LevelView = React.createClass({displayName: "LevelView",
 			return undefined;
 	},
 	renderBugsCount: function(){
-		var classes = this.state.deltaScore > 0 ? "animated bounce" : "";
+		var classes = this.props.prevScore < this.props.score ? "animated bounce" : "";
 		var bugsCount = this.props.level.bugsCount;
 		return React.createElement("div", {className: "score"}, 
 				"Осталось найти: ", React.createElement("span", {key: bugsCount, className: classes}, bugsCount)
@@ -575,12 +560,23 @@ var LevelView = React.createClass({displayName: "LevelView",
 			  React.createElement("div", {className: "row"}, 
 				React.createElement("div", {className: "col-sm-12"}, 
 					React.createElement("h2", null, "Уровень ", this.props.levelIndex+1, this.finished() && ". Пройден!"), 
-					React.createElement("p", null, "Найди и исправь все стилевые ошибки в коде. Кликай мышкой по ошибкам.", React.createElement("br", null), 
-					"Каждая найденная ошибка: +1 балл. Каждый промах или подсказка: –1 балл."), 
+					
+						_.map(
+							this.props.level.instruction.split('\n'), 
+							function(text, i){return React.createElement("div", {key: "instruction-" + i}, text)}), 
+					
 					React.createElement("div", {className: "code-container"}, 
 						React.createElement("span", {className: "code-toolbar"}, 
-							React.createElement(HoverButton, {text: "сравнить", enabled: hasProgress, onEnter: this.showOriginalCode, onLeave: this.showCurrentCode}), 
-							React.createElement(HintButton, {text: this.getHint(), onUsed: this.handleUseHint})
+							React.createElement(HoverButton, {
+								text: "сравнить", 
+								enabled: hasProgress, 
+								onEnter: this.showOriginalCode, 
+								onLeave: this.showCurrentCode}), 
+							React.createElement(MessageButton, {
+								title: "подсказка", disabledTitle: "нет подсказок", 
+								enabled: this.getHint()!==undefined, 
+								message: this.getHint(), 
+								onClick: this.handleUseHint})
 						), 
 						React.createElement(CodeView, {code: code.text, onClick: this.handleClick})
 					)
@@ -596,7 +592,7 @@ var LevelView = React.createClass({displayName: "LevelView",
 							"Общий счёт:" 
 						), 
 						React.createElement("div", {className: "pull-left score-value", ref: "score"}, this.props.score), 
-						 this.state.deltaScore < 0
+						 this.props.prevScore > this.props.score
 							? React.createElement("div", {key: this.props.score, className: "pull-left minus-one animated fadeOutDown"}, " —1")
 							: null, 
 						React.createElement("div", {className: "clearfix"})
@@ -616,17 +612,89 @@ var LevelView = React.createClass({displayName: "LevelView",
 	},
 
 	showOriginalCode: function() {
-		this.setState({ showOriginal: true, deltaScore: 0 });
+		this.setState({ showOriginal: true });
 	},
 
 	showCurrentCode: function() {
-		this.setState({ showOriginal: false, deltaScore: 0 });
+		this.setState({ showOriginal: false });
 	},
 });
 
 module.exports=LevelView;
-},{"./CodeSample":3,"./CodeView":4,"./Tracker":10,"./utils":11}],9:[function(require,module,exports){
+},{"./CodeSample":3,"./CodeView":4,"./HoverButton":8,"./MessageButton":10,"./Tracker":14,"./utils":15}],10:[function(require,module,exports){
+module.exports = React.createClass({displayName: "exports",
+	propTypes: {
+		title: React.PropTypes.string,
+		disabledTitle: React.PropTypes.string,
+		enabled: React.PropTypes.bool,
+		message: React.PropTypes.string,
+		onClick: React.PropTypes.func
+	},
+
+	handleClick: function(){
+		bootbox.alert(this.props.message, this.props.onClick);
+	},
+
+	render: function() {
+		if (this.props.enabled)
+			return React.createElement("span", {className: "tb-item", onClick: this.handleClick}, this.props.title);
+		else 
+			return React.createElement("span", {className: "tb-item disabled"}, this.props.disabledTitle)
+	}
+});
+},{}],11:[function(require,module,exports){
+var ProgressBar = React.createClass({displayName: "ProgressBar",
+	mixins: [Backbone.React.Component.mixin],
+
+	render: function() {
+		return React.createElement("table", {className: "header-progress"}, 
+					React.createElement("tr", null, 
+						
+							_.map(_.keys(this.props.levels), function(level, i){
+								var classes = "progress-tile" + ((i < this.props.levelIndex) ? " solved" : "");
+								return React.createElement("td", {key: "level" + i, className: classes})
+							}.bind(this))
+						
+					)
+				)
+	},
+});
+
+module.exports=ProgressBar;
+},{}],12:[function(require,module,exports){
+var PulsoView = React.createClass({displayName: "PulsoView",
+	propTypes: {
+		title: React.PropTypes.string
+	},
+	componentDidMount: function() {
+		if (window.pluso && typeof window.pluso.start == "function") return;
+		if (window.ifpluso==undefined) { 
+			window.ifpluso = 1;
+			var d = document, s = d.createElement('script'), g = 'getElementsByTagName';
+			s.type = 'text/javascript'; s.charset='UTF-8'; s.async = true;
+			s.src = ('https:' == window.location.protocol ? 'https' : 'http')  + '://share.pluso.ru/pluso-like.js';
+			var h=d[g]('body')[0];
+			h.appendChild(s);
+		}
+	},
+	render: function() {
+		return (
+			React.createElement("div", {
+				className: "pluso", 
+			 	"data-background": "#ebebeb", 
+			 	"data-options": "medium,square,line,horizontal,nocounter,theme=04", 
+			 	"data-services": "vkontakte,facebook,twitter,google,email", 
+			 	"data-url": "http://cleancodegame.github.io/", 
+			 	"data-title": this.props.title, 
+			 	"data-user": "73315997"})
+		);
+	}
+});
+
+module.exports = PulsoView;
+},{}],13:[function(require,module,exports){
 var BooksView = require("./BooksView");
+var PulsoView = require("./PulsoView");
 var utils = require("./utils");
 var tracker = require("./Tracker");
 
@@ -640,7 +708,6 @@ var ResultsView = React.createClass({displayName: "ResultsView",
 	componentDidMount: function() {
 		tracker.finished(this.props.score);
 		removeHash();
-		utils.initUpToLike();
 	},
 
 	getScorePercentage: function(){
@@ -661,7 +728,7 @@ var ResultsView = React.createClass({displayName: "ResultsView",
 				"Раздражает неряшливый код коллег? Поделись с ними этой игрой, и их код станет чуточку лучше! ;-)");
 		else if (rate > 60)
 			return this.renderVerdict(
-				"Неплохо, неплохо. Но можно и лучше", 
+				"Неплохо, неплохо. Но можно и лучше!", 
 				"Поделись этой игрой с коллегами, и их код тоже станет чуточку лучше! ;-)");
 		else
 			return this.renderVerdict(
@@ -670,23 +737,24 @@ var ResultsView = React.createClass({displayName: "ResultsView",
 	},
 
 	renderVerdict: function(headerPhrase, sharePhrase){
+		var title = "Я прошел Clean Code Game с результатом " + this.getScorePercentage() + "%!"
 		return (
 			React.createElement("div", null, 
 				React.createElement("h2", null, headerPhrase), 
 				this.renderScoreInfo(), 
+
+				React.createElement(PulsoView, {title: title}), 
+
 				this.renderMistakeDetails(), 
-				this.renderAgainButton(), 
-				React.createElement(BooksView, null), 
-				React.createElement("p", null, 
-				sharePhrase
-				), 
-				this.renderShareButtons()
+				
+				React.createElement("p", null, React.createElement(BooksView, null)), 
+				this.renderAgainButton()
 			));
 	},
 
 	renderScoreInfo: function(){
 		return (
-			React.createElement("p", null, this.getScorePercentage(), "% очков (", this.props.score, " из ", this.props.maxScore, " возможных).")
+			React.createElement("p", null, "Ты прошел Clean Code Game с результатом ", this.getScorePercentage(), "%! (", this.props.score, " из ", this.props.maxScore, " возможных).")
 			);
 	},
 
@@ -707,7 +775,7 @@ var ResultsView = React.createClass({displayName: "ResultsView",
 	},
 
 	renderAgainButton: function(){
-		return React.createElement("p", null, React.createElement("a", {href: "#", onClick: this.handlePlayAgain}, "Ещё разик?"))
+		return React.createElement("p", null, React.createElement("a", {className: "btn btn-lg btn-primary btn-styled", href: "#", onClick: this.handlePlayAgain}, "Ещё разик?"))
 	},
 
 	handlePlayAgain: function(){
@@ -718,16 +786,14 @@ var ResultsView = React.createClass({displayName: "ResultsView",
 	renderShareButtons: function(){
 		return (
 			React.createElement("div", {className: "share"}, 
-				React.createElement("div", {className: "uptolike-container"}, 
-					React.createElement("div", {"data-share-size": "40", "data-like-text-enable": "false", "data-background-alpha": "0.0", "data-pid": "1330841", "data-mode": "share", "data-background-color": "#ffffff", "data-share-shape": "rectangle", "data-share-counter-size": "12", "data-icon-color": "#ffffff", "data-text-color": "#000000", "data-buttons-color": "#ffffff", "data-counter-background-color": "#ffffff", "data-share-counter-type": "disable", "data-orientation": "horizontal", "data-following-enable": "false", "data-sn-ids": "fb.vk.tw.", "data-selection-enable": "false", "data-exclude-show-more": "false", "data-share-style": "1", "data-counter-background-alpha": "1.0", "data-top-button": "false", className: "uptolike-buttons"})
-				)
+				React.createElement(PulsoView, {result: this.getScorePercentage() + "%"})
 			));
 	},
 });
 
 module.exports = ResultsView;
 
-},{"./BooksView":2,"./Tracker":10,"./utils":11}],10:[function(require,module,exports){
+},{"./BooksView":2,"./PulsoView":12,"./Tracker":14,"./utils":15}],14:[function(require,module,exports){
 module.exports = {
 	levelSolved: function(levelIndex){
 		var category = 'level-solved';
@@ -754,17 +820,28 @@ module.exports = {
 		_gaq.push(['_trackEvent', event, ev, ev, value]);
 	}
 };
-},{}],11:[function(require,module,exports){
+},{}],15:[function(require,module,exports){
 'use strict';
 
 module.exports.animate = function(comp, effect){
-    if (!comp) return;
-    var $el = $(comp.getDOMNode());
-    $el.addClass("animated-fast " + effect);
-    $el.one(
-        'webkitAnimationEnd mozAnimationEnd MSAnimationEnd oanimationend animationend', 
-        function(){$el.removeClass("animated " + effect)}
-    );
+	if (!comp) return;
+	var $el = $(comp.getDOMNode());
+	$el.addClass("animated-fast " + effect);
+	$el.one(
+		'webkitAnimationEnd mozAnimationEnd MSAnimationEnd oanimationend animationend', 
+		function(){$el.removeClass("animated " + effect)}
+		);
+};
+
+module.exports.animate$ = function($el, effect, callback){
+	$el.addClass("animated-fast " + effect);
+	$el.one(
+		'webkitAnimationEnd mozAnimationEnd MSAnimationEnd oanimationend animationend', 
+		function(){
+			$el.removeClass("animated " + effect);
+			callback();
+		}
+	);
 };
 
 module.exports.initUpToLike = function(){
